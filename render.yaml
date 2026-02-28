@@ -27,10 +27,7 @@ services:
           name: ppm-db
           property: connectionString
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: ppm-redis
-          property: connectionString
+        sync: false
       - key: FRONTEND_URL
         value: https://ppm-web.onrender.com
       - key: CORS_ORIGINS

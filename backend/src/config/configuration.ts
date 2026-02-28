@@ -10,12 +10,16 @@ export default () => ({
   redis: (() => {
     const redisUrl = process.env.REDIS_URL;
     if (redisUrl) {
-      const u = new URL(redisUrl);
-      return {
-        host: u.hostname,
-        port: parseInt(u.port, 10) || 6379,
-        password: u.password || '',
-      };
+      try {
+        const u = new URL(redisUrl);
+        return {
+          host: u.hostname,
+          port: parseInt(u.port, 10) || 6379,
+          password: u.password || '',
+        };
+      } catch {
+        // Invalid URL, fall back to individual vars
+      }
     }
     return {
       host: process.env.REDIS_HOST || 'localhost',
