@@ -11,6 +11,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
+  // Health check for Render (must be before global prefix)
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/', (_req, res) => res.status(200).json({ status: 'ok' }));
+  httpAdapter.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
+
   // Global prefix
   app.setGlobalPrefix('api/v1');
 
