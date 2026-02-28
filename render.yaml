@@ -15,8 +15,8 @@ services:
     env: node
     plan: free
     rootDir: backend
-    buildCommand: npm ci && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && node dist/main
+    buildCommand: npm ci --include=dev && npm run prisma:generate && npm run build
+    startCommand: ./node_modules/.bin/prisma migrate deploy && node dist/main
     envVars:
       - key: NODE_ENV
         value: production
