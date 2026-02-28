@@ -14,8 +14,8 @@ services:
     name: ppm-api
     env: docker
     plan: free
-    rootDir: backend
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     preDeployCommand: "npx prisma migrate deploy"
     envVars:
       - key: NODE_ENV
@@ -72,8 +72,8 @@ services:
     name: ppm-web
     env: docker
     plan: free
-    rootDir: frontend
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://ppm-api.onrender.com
