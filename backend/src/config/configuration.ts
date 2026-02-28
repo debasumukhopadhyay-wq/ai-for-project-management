@@ -7,11 +7,22 @@ export default () => ({
     url: process.env.DATABASE_URL,
   },
 
-  redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
-    password: process.env.REDIS_PASSWORD || '',
-  },
+  redis: (() => {
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      const u = new URL(redisUrl);
+      return {
+        host: u.hostname,
+        port: parseInt(u.port, 10) || 6379,
+        password: u.password || '',
+      };
+    }
+    return {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+      password: process.env.REDIS_PASSWORD || '',
+    };
+  })(),
 
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET || 'access-secret-dev',
