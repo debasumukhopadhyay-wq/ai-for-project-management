@@ -1,0 +1,582 @@
+// ============================================================
+// Prisma Schema — AI PPM Platform
+// PostgreSQL + Multi-tenant architecture
+// ============================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  PORTFOLIO_MANAGER
+  PROGRAM_MANAGER
+  PROJECT_MANAGER
+  PMO
+  FINANCE
+  RESOURCE_MANAGER
+  CLIENT_VIEWER
+}
+
+enum ProjectStatus {
+  DRAFT
+  INITIATION
+  PLANNING
+  EXECUTION
+  MONITORING
+  CLOSURE
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+enum RagStatus {
+  RED
+  AMBER
+  GREEN
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  BLOCKED
+}
+
+enum TaskPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RiskProbability {
+  VERY_HIGH
+  HIGH
+  MEDIUM
+  LOW
+  VERY_LOW
+}
+
+enum RiskImpact {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  VERY_LOW
+}
+
+enum RiskStatus {
+  OPEN
+  MITIGATED
+  ACCEPTED
+  CLOSED
+  ESCALATED
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+enum ChangeRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  IMPLEMENTED
+}
+
+enum BudgetType {
+  CAPEX
+  OPEX
+}
+
+enum MilestoneStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+  AT_RISK
+}
+
+enum DocumentCategory {
+  SOW
+  CONTRACT
+  TECHNICAL_SPEC
+  PROJECT_PLAN
+  RISK_REGISTER
+  STATUS_REPORT
+  MEETING_MINUTES
+  INVOICE
+  OTHER
+}
+
+enum ResourceType {
+  INTERNAL
+  CONTRACTOR
+  VENDOR
+}
+
+// ─── Models ───────────────────────────────────────────────
+
+model Organization {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  domain      String?
+  logoUrl     String?
+  isActive    Boolean   @default(true)
+  settings    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  users            User[]
+  portfolios       Portfolio[]
+  programs         Program[]
+  projects         Project[]
+  tasks            Task[]
+  resources        Resource[]
+  risks            Risk[]
+  issues           Issue[]
+  changeRequests   ChangeRequest[]
+  documents        Document[]
+  auditLogs        AuditLog[]
+  milestones       Milestone[]
+  budgets          Budget[]
+  assignments      ResourceAssignment[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  organizationId String
+  email          String
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           UserRole  @default(PROJECT_MANAGER)
+  avatarUrl      String?
+  phone          String?
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  refreshToken   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  managedPortfolios  Portfolio[]         @relation("PortfolioOwner")
+  managedPrograms    Program[]           @relation("ProgramManager")
+  managedProjects    Project[]           @relation("ProjectManager")
+  assignedTasks      Task[]              @relation("TaskAssignee")
+  reportedTasks      Task[]              @relation("TaskReporter")
+  ownedRisks         Risk[]
+  ownedIssues        Issue[]
+  requestedCRs       ChangeRequest[]     @relation("CRRequester")
+  approvedCRs        ChangeRequest[]     @relation("CRApprover")
+  uploadedDocuments  Document[]
+  projectMemberships ProjectMember[]
+  ownedMilestones    Milestone[]
+  auditLogs          AuditLog[]
+
+  @@unique([email, organizationId])
+  @@map("users")
+}
+
+model Portfolio {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  name                 String
+  description          String?
+  ownerId              String?
+  strategicObjectives  String?
+  totalBudget          Decimal   @default(0) @db.Decimal(18, 2)
+  allocatedBudget      Decimal   @default(0) @db.Decimal(18, 2)
+  ragStatus            RagStatus @default(GREEN)
+  startDate            DateTime? @db.Date
+  endDate              DateTime? @db.Date
+  isActive             Boolean   @default(true)
+  metadata             Json      @default("{}")
+  createdBy            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  owner        User?        @relation("PortfolioOwner", fields: [ownerId], references: [id])
+  programs     Program[]
+
+  @@map("portfolios")
+}
+
+model Program {
+  id               String        @id @default(uuid())
+  organizationId   String
+  portfolioId      String?
+  name             String
+  description      String?
+  programManagerId String?
+  totalBudget      Decimal       @default(0) @db.Decimal(18, 2)
+  allocatedBudget  Decimal       @default(0) @db.Decimal(18, 2)
+  ragStatus        RagStatus     @default(GREEN)
+  startDate        DateTime?     @db.Date
+  endDate          DateTime?     @db.Date
+  status           ProjectStatus @default(PLANNING)
+  objectives       String?
+  benefits         String?
+  metadata         Json          @default("{}")
+  createdBy        String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  portfolio       Portfolio?   @relation(fields: [portfolioId], references: [id])
+  programManager  User?        @relation("ProgramManager", fields: [programManagerId], references: [id])
+  projects        Project[]
+  documents       Document[]
+
+  @@map("programs")
+}
+
+model Project {
+  id                 String        @id @default(uuid())
+  organizationId     String
+  programId          String?
+  name               String
+  description        String?
+  projectManagerId   String?
+  status             ProjectStatus @default(INITIATION)
+  ragStatus          RagStatus     @default(GREEN)
+  projectType        String?
+  plannedStartDate   DateTime?     @db.Date
+  plannedEndDate     DateTime?     @db.Date
+  actualStartDate    DateTime?     @db.Date
+  actualEndDate      DateTime?     @db.Date
+  baselineEndDate    DateTime?     @db.Date
+  totalBudget        Decimal       @default(0) @db.Decimal(18, 2)
+  actualCost         Decimal       @default(0) @db.Decimal(18, 2)
+  forecastCost       Decimal       @default(0) @db.Decimal(18, 2)
+  percentComplete    Int           @default(0)
+  plannedValue       Decimal       @default(0) @db.Decimal(18, 2)
+  earnedValue        Decimal       @default(0) @db.Decimal(18, 2)
+  siteCount          Int           @default(0)
+  sitesCompleted     Int           @default(0)
+  lessonsLearned     String?
+  closureNotes       String?
+  metadata           Json          @default("{}")
+  createdBy          String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  program         Program?            @relation(fields: [programId], references: [id])
+  projectManager  User?               @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  tasks           Task[]
+  milestones      Milestone[]
+  risks           Risk[]
+  issues          Issue[]
+  changeRequests  ChangeRequest[]
+  budgets         Budget[]
+  documents       Document[]
+  members         ProjectMember[]
+  assignments     ResourceAssignment[]
+
+  @@map("projects")
+}
+
+model Milestone {
+  id             String          @id @default(uuid())
+  organizationId String
+  projectId      String
+  name           String
+  description    String?
+  plannedDate    DateTime        @db.Date
+  actualDate     DateTime?       @db.Date
+  status         MilestoneStatus @default(NOT_STARTED)
+  ownerId        String?
+  isKeyMilestone Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
+  owner        User?        @relation(fields: [ownerId], references: [id])
+  tasks        Task[]
+
+  @@map("milestones")
+}
+
+model Task {
+  id               String       @id @default(uuid())
+  organizationId   String
+  projectId        String
+  parentTaskId     String?
+  milestoneId      String?
+  title            String
+  description      String?
+  status           TaskStatus   @default(TODO)
+  priority         TaskPriority @default(MEDIUM)
+  assigneeId       String?
+  reporterId       String?
+  plannedStart     DateTime?    @db.Date
+  plannedEnd       DateTime?    @db.Date
+  actualStart      DateTime?    @db.Date
+  actualEnd        DateTime?    @db.Date
+  estimatedHours   Decimal?     @db.Decimal(8, 2)
+  loggedHours      Decimal      @default(0) @db.Decimal(8, 2)
+  percentComplete  Int          @default(0)
+  wbsCode          String?
+  tags             String[]
+  position         Int          @default(0)
+  metadata         Json         @default("{}")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  project      Project            @relation(fields: [projectId], references: [id])
+  parentTask   Task?              @relation("TaskHierarchy", fields: [parentTaskId], references: [id])
+  subtasks     Task[]             @relation("TaskHierarchy")
+  milestone    Milestone?         @relation(fields: [milestoneId], references: [id])
+  assignee     User?              @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  reporter     User?              @relation("TaskReporter", fields: [reporterId], references: [id])
+  assignments  ResourceAssignment[]
+
+  @@map("tasks")
+}
+
+model Resource {
+  id                   String       @id @default(uuid())
+  organizationId       String
+  userId               String?
+  name                 String
+  email                String?
+  resourceType         ResourceType @default(INTERNAL)
+  roleTitle            String?
+  skills               String[]
+  dailyRate            Decimal?     @db.Decimal(10, 2)
+  currency             String       @default("USD")
+  availabilityPercent  Int          @default(100)
+  isActive             Boolean      @default(true)
+  metadata             Json         @default("{}")
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  deletedAt            DateTime?
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  assignments  ResourceAssignment[]
+
+  @@map("resources")
+}
+
+model ResourceAssignment {
+  id                String   @id @default(uuid())
+  organizationId    String
+  resourceId        String
+  projectId         String
+  taskId            String?
+  allocationPercent Int      @default(100)
+  startDate         DateTime @db.Date
+  endDate           DateTime @db.Date
+  plannedHours      Decimal? @db.Decimal(8, 2)
+  actualHours       Decimal  @default(0) @db.Decimal(8, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  resource     Resource     @relation(fields: [resourceId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
+  task         Task?        @relation(fields: [taskId], references: [id])
+
+  @@map("resource_assignments")
+}
+
+model Budget {
+  id             String     @id @default(uuid())
+  organizationId String
+  projectId      String
+  name           String
+  budgetType     BudgetType @default(OPEX)
+  category       String?
+  plannedAmount  Decimal    @default(0) @db.Decimal(18, 2)
+  actualAmount   Decimal    @default(0) @db.Decimal(18, 2)
+  forecastAmount Decimal    @default(0) @db.Decimal(18, 2)
+  currency       String     @default("USD")
+  periodStart    DateTime?  @db.Date
+  periodEnd      DateTime?  @db.Date
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
+
+  @@map("budgets")
+}
+
+model Risk {
+  id              String          @id @default(uuid())
+  organizationId  String
+  projectId       String
+  title           String
+  description     String?
+  category        String?
+  probability     RiskProbability @default(MEDIUM)
+  impact          RiskImpact      @default(MEDIUM)
+  riskScore       Int             @default(9)
+  status          RiskStatus      @default(OPEN)
+  ownerId         String?
+  mitigationPlan  String?
+  contingencyPlan String?
+  dueDate         DateTime?       @db.Date
+  aiSuggestions   Json            @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
+  owner        User?        @relation(fields: [ownerId], references: [id])
+  issues       Issue[]
+
+  @@map("risks")
+}
+
+model Issue {
+  id             String      @id @default(uuid())
+  organizationId String
+  projectId      String
+  riskId         String?
+  title          String
+  description    String?
+  category       String?
+  impact         RiskImpact  @default(MEDIUM)
+  status         IssueStatus @default(OPEN)
+  ownerId        String?
+  resolution     String?
+  dueDate        DateTime?   @db.Date
+  resolvedAt     DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
+  risk         Risk?        @relation(fields: [riskId], references: [id])
+  owner        User?        @relation(fields: [ownerId], references: [id])
+
+  @@map("issues")
+}
+
+model ChangeRequest {
+  id               String              @id @default(uuid())
+  organizationId   String
+  projectId        String
+  crNumber         String?
+  title            String
+  description      String
+  justification    String?
+  impactScope      String?
+  impactSchedule   String?
+  impactBudget     Decimal             @default(0) @db.Decimal(18, 2)
+  status           ChangeRequestStatus @default(DRAFT)
+  requestedById    String?
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
+  requestedBy  User?        @relation("CRRequester", fields: [requestedById], references: [id])
+  approvedBy   User?        @relation("CRApprover", fields: [approvedById], references: [id])
+
+  @@map("change_requests")
+}
+
+model Document {
+  id             String           @id @default(uuid())
+  organizationId String
+  projectId      String?
+  programId      String?
+  name           String
+  description    String?
+  category       DocumentCategory @default(OTHER)
+  fileKey        String
+  fileName       String
+  fileSize       BigInt?
+  mimeType       String?
+  version        Int              @default(1)
+  parentId       String?
+  tags           String[]
+  uploadedById   String?
+  aiSummary      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
+  program      Program?     @relation(fields: [programId], references: [id])
+  uploadedBy   User?        @relation(fields: [uploadedById], references: [id])
+  parent       Document?    @relation("DocumentVersions", fields: [parentId], references: [id])
+  versions     Document[]   @relation("DocumentVersions")
+
+  @@map("documents")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String?
+  oldValues      Json?
+  newValues      Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  role      UserRole
+  joinedAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
